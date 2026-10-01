@@ -97,6 +97,22 @@ bool MDD::buildMDD(const ConstraintTable& ct,
 		}
 	}
 	assert(levels.back().size() == 1);
+	if (levels.back().empty())
+	{
+		// The forward search didn't converge to a (unique) final-level node -- in release
+		// builds the assert above is compiled out, so without this check the .back() below
+		// would be undefined behavior on an empty vector. Known to happen for
+		// LtlMapfPlanner's staged multi-goal search under heavy constraint accumulation
+		// (e.g. dumb_conflict()'s per-(agent,timestep) branching); root cause not chased down
+		// here. Clean up and report failure rather than crash -- callers (MDDTable::getMDD /
+		// findSingletons) already treat a not-fully-populated MDD safely: unconverged levels
+		// stay empty, giving mdd_width=0 there, so is_single() correctly reports "not a
+		// singleton" instead of silently/incorrectly claiming cardinality.
+		for (auto it : closed)
+			delete it;
+		closed.clear();
+		return false;
+	}
 
 	// Backward
 	auto goal_node = levels.back().back();
