@@ -34,7 +34,7 @@ Path MultiLabelSpaceTimeAStar::findPath(const CBSNode& node, const ConstraintTab
 	auto starrt_time = clock();
 	ConstraintTable constraint_table(initial_constraints);
 	// JK: changing this line because goal_locations now belong to CBSNode
-	constraint_table.build(node, agent, node.goal_locations.size());
+	constraint_table.build(node, agent, node.goal_locations[agent].size());
 
 	runtime_build_CT = (double) (clock() - starrt_time) / CLOCKS_PER_SEC;
 	if (constraint_table.length_min >= MAX_TIMESTEP || constraint_table.length_min > constraint_table.length_max ||  // the agent cannot reach
