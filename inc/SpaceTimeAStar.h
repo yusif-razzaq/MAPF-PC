@@ -93,6 +93,7 @@ private:
 	heap_open_t open_list;
 	heap_focal_t focal_list;
 
+	const vector<GoalSetPtr>* cur_sets_ = nullptr; // set-valued goals of the agent being searched (nullptr = single-vertex goals)
 	int min_f_val; // minimal f value in OPEN
 	int lower_bound; // Threshold for FOCAL
 

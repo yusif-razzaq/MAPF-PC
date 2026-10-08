@@ -2,6 +2,7 @@
 
 #include "Instance.h"
 #include "ConstraintTable.h"
+#include "GoalSet.h"
 
 class LLNode // low-level node
 {
@@ -154,9 +155,13 @@ public:
   vector<int> heuristic_landmark;
 	vector<vector<int>> my_heuristic;  // this is the precomputed heuristic for this agent
   int get_heuristic(int stage, int loc) const{
-    // h to next goal and h from next goal to the last goal
+    // single-vertex goals: h to next goal and h from next goal to the last goal.
+    // set-valued goals: the exact cost of visiting stage sets stage..last in order (see compute_heuristics(sets)).
+    if (set_mode_) return heur_total_[stage][loc];
     return my_heuristic[stage][loc] + heuristic_landmark[stage];
   }
+  bool set_mode_ = false;               // true after compute_heuristics(sets)
+  vector<vector<int>> heur_total_;      // set mode: heur_total_[s][v] = fewest moves from v to visit S_s, S_{s+1}, ..., S_last in order
 	int compute_heuristic(int from, int to) const  // compute admissible heuristic between two locations
 	{
 		return max(get_DH_heuristic(from, to), instance.getManhattanDistance(from, to));
@@ -189,6 +194,10 @@ public:
   bool use_timestamps = true;
 
   void compute_heuristics(const vector<int>& goals);
+  // Set-valued goals. my_heuristic[s] = multi-source BFS distance to S_s; heur_total_[s] = exact remaining cost through S_s..S_last (a cell
+  // that belongs to consecutive sets satisfies them at once, which is also how the search advances stages); heuristic_landmark[s] = cheapest
+  // remaining cost from any cell of S_s. All three are exact shortest-path quantities on the static grid, so admissible and consistent.
+  void compute_heuristics(const vector<GoalSetPtr>& sets);
 
 protected:
 

@@ -4,6 +4,7 @@
 #include "Conflict.h"
 #include "ConstraintTable.h"
 #include "Instance.h"
+#include "GoalSet.h"
 
 enum node_selection { NODE_RANDOM, NODE_H, NODE_DEPTH, NODE_CONFLICTS, NODE_CONFLICTPAIRS, NODE_MVC };
 
@@ -73,7 +74,8 @@ public:
   	// temporal_cons[i * num_of_agents + j] = [{k, l}]
   	// The k-th task of i should happens before the l-th task of j
   	vector<vector<pair<int, int>> > temporal_cons;
-  	vector<vector<int>> goal_locations; // system goals
+  	vector<vector<int>> goal_locations; // system goals (one vertex per stage; with goal_sets it is a representative member of the stage's set)
+  	vector<vector<GoalSetPtr>> goal_sets; // optional set-valued goals: goal_sets[agent][stage]. Empty (or an empty entry for an agent) = single-vertex goals
   	vector<ConstraintTable> initial_constraints; // see CBS constructor for details on how this should be set
   	int helpers_idx = -1; // this is set during root node setup -- provides a pointer to the correct helper based on the what tree its in
   	vector<Path> paths_found_initially;  // contain initial paths found

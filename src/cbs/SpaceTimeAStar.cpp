@@ -14,7 +14,9 @@ void MultiLabelSpaceTimeAStar::updatePath(const LLNode* goal, Path& path, const 
 		path[curr->g_val].mdd_width = 0;
 
     if (curr->parent !=nullptr && curr->stage != curr->parent->stage){
-      path.timestamps[curr->parent->stage] = curr->g_val;
+      // set-valued goals: a cell that belongs to consecutive stage sets completes all of them at this step
+      for (unsigned int st = curr->parent->stage; st < curr->stage; st++)
+        path.timestamps[st] = curr->g_val;
       path[curr->g_val].is_goal = true;
     }else{
       path[curr->g_val].is_goal = false;
@@ -50,7 +52,17 @@ Path MultiLabelSpaceTimeAStar::findPath(const CBSNode& node, const ConstraintTab
 
 	// compute heuristics for given goal sequence inside cbs node
 	// doing this here every time is pretty inefficient but least subjective to bugs
-	compute_heuristics(node.goal_locations[agent]);
+	// set-valued goals (CBSNode::goal_sets): the heuristic is the exact cost through the ordered sets and stage tests are membership tests
+	if (agent < (int) node.goal_sets.size() && !node.goal_sets[agent].empty())
+	{
+		cur_sets_ = &node.goal_sets[agent];
+		compute_heuristics(node.goal_sets[agent]);
+	}
+	else
+	{
+		cur_sets_ = nullptr;
+		compute_heuristics(node.goal_locations[agent]);
+	}
   return findShortestPath(constraint_table, make_pair(start_location, 0), lowerbound, node.goal_locations[agent]);
 
   
@@ -94,7 +106,17 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
   // g_goal_time[0] < start->g_val (= 0), which can never hold, so the branch was dead and the agent had to step
   // off/wait to "arrive" at a goal it was already on (+1 cost). With a single goal there is no later stage to
   // advance to (the goal test needs stage == goals.size() - 1), so only advance when more goals follow.
-  if (start->location ==  (unsigned int)goals[0] && goals.size() > 1 && constraint_table.g_goal_time[0] < start->g_val){
+  const bool set_goals = (cur_sets_ != nullptr);
+  const int last_stage = (int) goals.size() - 1;
+  // stage membership: one vertex (legacy) or a set of vertices
+  auto in_goal = [&](int stage, int loc) { return set_goals ? (*cur_sets_)[stage]->contains(loc) : (loc == goals[stage]); };
+  if (set_goals)
+  {
+    // a start cell that belongs to the first sets satisfies them at time 0 (closure over consecutive sets)
+    while ((int) start->stage < last_stage && in_goal(start->stage, start->location) && constraint_table.g_goal_time[start->stage] < start->g_val)
+      start->stage += 1;
+  }
+  else if (start->location ==  (unsigned int)goals[0] && goals.size() > 1 && constraint_table.g_goal_time[0] < start->g_val){
     start->stage += 1;
     if (use_timestamps){
       // timestamps.push_back(0);
@@ -103,7 +125,17 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
 
 	allNodes_table.insert(start);
 	min_f_val = (int) start->getFVal();
-	int holding_time = constraint_table.getHoldingTime(); // the earliest timestep that the agent can hold its goal location. The length_min is considered here.
+	int holding_time;
+	if (set_goals)
+	{   // the agent may end on any member of the last set: the focal bound uses the earliest holding time over the set,
+		// the goal test below uses the holding time of the cell it actually ends on
+		holding_time = INT_MAX;
+		for (int v : (*cur_sets_)[last_stage]->cells)
+			holding_time = min(holding_time, constraint_table.getHoldingTimeAt(v));
+		if (holding_time == INT_MAX) holding_time = constraint_table.length_min;
+	}
+	else
+		holding_time = constraint_table.getHoldingTime(); // the earliest timestep that the agent can hold its goal location. The length_min is considered here.
 	lower_bound = max(holding_time - start_state.second, max(min_f_val, lowerbound));
 
 	while (!open_list.empty())
@@ -112,10 +144,10 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
 		auto* curr = popNode();
 
 		// check if the popped node is a goal
-		if (curr->location == goals.back() && // arrive at the goal location
-        curr->stage == goals.size() - 1 && // reach all previous goals
+		if (in_goal(last_stage, curr->location) && // arrive at a goal location
+        (int) curr->stage == last_stage && // reach all previous goals
 			!curr->wait_at_goal && // not wait at the goal location
-			curr->timestep >= holding_time) // the agent can hold the goal location afterward
+			curr->timestep >= (set_goals ? constraint_table.getHoldingTimeAt(curr->location) : holding_time)) // the agent can hold the goal location afterward
 		{
 			updatePath(curr, path, goals);
 			break;
@@ -155,7 +187,16 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
 			if (next_g_val + next_h_val > constraint_table.length_max || next_g_val + next_h_val > f_ub[stage])
 				continue;
 
-      if (next_location ==  (unsigned int)goals[stage] && stage < goals.size() - 1 && constraint_table.g_goal_time[stage] < curr->g_val + 1){
+      if (set_goals)
+      {   // closure: a cell that belongs to consecutive stage sets completes all of them in this step
+        while ((int) stage < last_stage && in_goal(stage, next_location) && constraint_table.g_goal_time[stage] < curr->g_val + 1){
+          stage += 1;
+          if (use_timestamps){
+            timestamps.push_back(curr->g_val + 1);
+          }
+        }
+      }
+      else if (next_location ==  (unsigned int)goals[stage] && stage < goals.size() - 1 && constraint_table.g_goal_time[stage] < curr->g_val + 1){
         stage += 1;
         if (use_timestamps){
           timestamps.push_back(curr->g_val + 1);
@@ -172,7 +213,7 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
       next->timestamps  = timestamps;
       next->dist_to_next = my_heuristic[stage][next_location];
 
-			if (next->stage == goals.size() - 1 && next_location == goals.back() && curr->location == goals.back()){
+			if ((int) next->stage == last_stage && in_goal(last_stage, next_location) && next_location == curr->location && in_goal(last_stage, curr->location)){
 				next->wait_at_goal = true;
       }
 

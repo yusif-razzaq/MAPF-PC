@@ -19,6 +19,7 @@ public:
   vector<int> g_goal_time;
 
 	int getHoldingTime(); // the earliest timestep that the agent can hold its goal location
+	int getHoldingTimeAt(int loc); // same for an arbitrary vertex (set-valued goals: the agent may end on any member of the last set)
 
 	// void clear(){ct.clear(); cat_small.clear(); cat_large.clear(); landmarks.clear(); length_min = 0, length_max = INT_MAX; latest_timestep = 0;}
 

@@ -1,4 +1,6 @@
 #include "SingleAgentSolver.h"
+#include <queue>
+#include <functional>
 
 
 list<int> SingleAgentSolver::getNextLocations(int curr) const // including itself and its neighbors
@@ -11,6 +13,7 @@ list<int> SingleAgentSolver::getNextLocations(int curr) const // including itsel
 // JK: This is a TO-DO
 void SingleAgentSolver::compute_heuristics(const vector<int>& goals)
 {
+  set_mode_ = false;
 	struct Node
 	{
 		int location;
@@ -62,4 +65,48 @@ void SingleAgentSolver::compute_heuristics(const vector<int>& goals)
     heuristic_landmark[i] = heuristic_landmark[i + 1] + my_heuristic[i + 1][goals[i]];
   }
 
+}
+
+
+void SingleAgentSolver::compute_heuristics(const vector<GoalSetPtr>& sets)
+{
+  set_mode_ = true;
+  const int S = (int) sets.size();
+  const int N = (int) instance.map_size;
+  my_heuristic.assign(S, vector<int>(N, MAX_TIMESTEP));
+  heur_total_.assign(S, vector<int>(N, MAX_TIMESTEP));
+  heuristic_landmark.assign(S, 0);
+
+  using QE = std::pair<int, int>; // (value, location)
+  auto dijkstra = [&](vector<int>& dist, const vector<QE>& seeds) {
+    std::priority_queue<QE, vector<QE>, std::greater<QE>> pq;
+    for (const auto& sd : seeds)
+      if (sd.first < dist[sd.second]) { dist[sd.second] = sd.first; pq.push(sd); }
+    while (!pq.empty())
+    {
+      auto [d, u] = pq.top();
+      pq.pop();
+      if (d > dist[u]) continue;
+      for (int w : instance.getNeighbors(u))
+        if (dist[w] > d + 1) { dist[w] = d + 1; pq.push({d + 1, w}); }
+    }
+  };
+
+  for (int s = S - 1; s >= 0; s--)
+  {
+    // plain distance to the set
+    vector<QE> seeds;
+    for (int u : sets[s]->cells) seeds.push_back({0, u});
+    dijkstra(my_heuristic[s], seeds);
+    // exact remaining cost: seed every member with the cost of finishing the later stages from there
+    seeds.clear();
+    for (int u : sets[s]->cells)
+      seeds.push_back({s == S - 1 ? 0 : heur_total_[s + 1][u], u});
+    dijkstra(heur_total_[s], seeds);
+    // cheapest remaining cost starting from any cell of this stage (what the single-vertex landmark sum is for a one-element set)
+    int best = MAX_TIMESTEP;
+    if (s < S - 1)
+      for (int u : sets[s]->cells) best = std::min(best, heur_total_[s + 1][u]);
+    heuristic_landmark[s] = (s == S - 1) ? 0 : best;
+  }
 }

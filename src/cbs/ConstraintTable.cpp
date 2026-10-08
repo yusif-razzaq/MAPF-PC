@@ -397,6 +397,26 @@ int ConstraintTable::getNumOfConflictsForStep(size_t curr_id, size_t next_id, in
 }
 
 
+// return the earliest timestep that the agent can hold the vertex `loc` forever (set-valued goals)
+int ConstraintTable::getHoldingTimeAt(int loc)
+{
+	int rst = length_min;
+	auto it = ct.r().find(loc);
+	if (it != ct.r().end())
+	{
+		for (auto time_range : it->second)
+			rst = max(rst, time_range.second);
+	}
+	for (auto landmark : landmarks)
+	{
+		if (landmark.second != (size_t) loc)
+			rst = max(rst, (int) landmark.first + 1);
+	}
+	if (g_goal_time.size() != 0)
+		rst = max(rst, g_goal_time.back() + 1);
+	return rst;
+}
+
 // return the earliest timestep that the agent can hold its goal location
 int ConstraintTable::getHoldingTime()
 {
