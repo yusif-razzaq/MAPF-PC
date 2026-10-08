@@ -220,12 +220,12 @@ void ReservationTable::updateSIT(size_t location)
 		}
 
 		// negative constraints
-		const auto& it = ct.find(location);
-		if (it != ct.end())
+		const auto& it = ct.w().find(location);
+		if (it != ct.w().end())
 		{
 			for (auto time_range : it->second)
 				insert2RT(location, time_range.first, time_range.second);
-			ct.erase(it);
+			ct.w().erase(it);
 		}
 
 		// positive constraints

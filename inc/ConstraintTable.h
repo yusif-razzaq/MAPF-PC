@@ -38,12 +38,35 @@ public:
 	void insert2CT(size_t loc, int t_min, int t_max); // insert a vertex constraint to the constraint table
 	void insert2CT(size_t from, size_t to, int t_min, int t_max); // insert an edge constraint to the constraint table
 
+	// Approximate heap bytes held by this table (diagnostics only, LTL_MEMSTAT). Ignores allocator overhead.
+	const void* ctId() const { return ct.p.get(); }
+	size_t approxBytes(bool include_ct = true) const
+	{
+		size_t b = sizeof(*this) + (leq_goal_time.capacity() + g_goal_time.capacity()) * sizeof(int);
+		if (include_ct)
+		{
+			b += ct.r().bucket_count() * sizeof(void*);
+			for (const auto& kv : ct.r()) b += 48 + kv.second.size() * 32; // map node + list nodes (pair<int,int> + 2 ptrs)
+		}
+		b += landmarks.bucket_count() * sizeof(void*) + landmarks.size() * 32;
+		return b;
+	}
 	size_t getNumOfLandmarks() const { return landmarks.size(); }
 	unordered_map<size_t, size_t> getLandmarks() const { return landmarks; }
 	list<pair<int, int>> decodeBarrier(int B1, int B2, int t);
 protected:
 	// Constraint Table (CT)
-	unordered_map<size_t, list<pair<int, int>>> ct; // location -> time range, or edge -> time range
+	// location -> time range, or edge -> time range. Copy-on-write: a child CBS node copies its parent's per-agent tables
+	// but only a node that actually inserts a constraint (e.g. an AVOID window extension) pays for a private map; the
+	// bulk of generated nodes share the parent's map. Read via ct.r(), mutate via ct.w() (detaches if shared).
+	struct CowCT
+	{
+		using Map = unordered_map<size_t, list<pair<int, int>>>;
+		std::shared_ptr<Map> p = std::make_shared<Map>();
+		const Map& r() const { return *p; }
+		Map& w() { if (p.use_count() > 1) p = std::make_shared<Map>(*p); return *p; }
+	};
+	CowCT ct;
 
 	unordered_map<size_t, size_t> landmarks; // <timestep, location>: the agent must be at the given location at the given timestep
 

@@ -27,7 +27,7 @@ void ConstraintTable::insert2CT(size_t from, size_t to, int t_min, int t_max)
 void ConstraintTable::insert2CT(size_t loc, int t_min, int t_max)
 {
 	assert(loc >= 0);
-	ct[loc].emplace_back(t_min, t_max);
+	ct.w()[loc].emplace_back(t_min, t_max);
 	if (t_max < MAX_TIMESTEP && t_max > latest_timestep)
 	{
 		latest_timestep = t_max;
@@ -96,8 +96,8 @@ bool ConstraintTable::constrained(size_t loc, int t) const
 			return true;  // violate the positive vertex constraint
 	}
 
-	const auto& it = ct.find(loc);
-	if (it == ct.end())
+	const auto& it = ct.r().find(loc);
+	if (it == ct.r().end())
 	{
 		return false;
 	}
@@ -401,8 +401,8 @@ int ConstraintTable::getNumOfConflictsForStep(size_t curr_id, size_t next_id, in
 int ConstraintTable::getHoldingTime()
 {
 	int rst = length_min;
-	auto it = ct.find(goal_location);
-	if (it != ct.end())
+	auto it = ct.r().find(goal_location);
+	if (it != ct.r().end())
 	{
 		for (auto time_range : it->second)
 			rst = max(rst, time_range.second);

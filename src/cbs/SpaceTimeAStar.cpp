@@ -89,7 +89,12 @@ Path MultiLabelSpaceTimeAStar::findShortestPath(ConstraintTable& constraint_tabl
 	start->in_openlist = true;
 
 
-  if (start->location ==  (unsigned int)goals[0] && constraint_table.g_goal_time[0] >= 0 && constraint_table.g_goal_time[0] < start->g_val){
+  // The agent already stands on its first goal at t=0: that goal is reached at time 0 (same rule as the
+  // transition case below, g_goal_time[stage] < arrival time). The old test required g_goal_time[0] >= 0 AND
+  // g_goal_time[0] < start->g_val (= 0), which can never hold, so the branch was dead and the agent had to step
+  // off/wait to "arrive" at a goal it was already on (+1 cost). With a single goal there is no later stage to
+  // advance to (the goal test needs stage == goals.size() - 1), so only advance when more goals follow.
+  if (start->location ==  (unsigned int)goals[0] && goals.size() > 1 && constraint_table.g_goal_time[0] < start->g_val){
     start->stage += 1;
     if (use_timestamps){
       // timestamps.push_back(0);

@@ -10,10 +10,14 @@
 // also, do the same for ll_min_f_vals and paths_costs (since its already "on the way").
 void CBS::updatePaths(CBSNode* curr)
 {
-  if (curr->paths_found_initially.size() != num_of_agents)
+  // paths_found_initially is only ever set on the root (children do not copy it), so read it from there
+  const CBSNode* root = curr;
+  while (root->parent != nullptr)
+    root = root->parent;
+  if (root->paths_found_initially.size() != num_of_agents)
     throw std::runtime_error("Something went wrong here!");
   for (int i = 0; i < num_of_agents; i++)
-    paths[i] = &(curr->paths_found_initially[i]);
+    paths[i] = const_cast<Path*>(&(root->paths_found_initially[i]));
   vector<bool> updated(num_of_agents, false);  // initialized for false
 
   while (curr != nullptr)
